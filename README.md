@@ -1,10 +1,10 @@
 CircleCutter
 =========
-Modified version of splicePlot for circRNA
+Visualization toolkit for splicing QTL and circularization QTL
 
 ## Log
 
-### 20171003
+### 2017/10/03
 - Initial fork from SplicePlot (https://github.com/wueric/SplicePlot)
 - test with revised version of sashimi_plot_utils.py
 
