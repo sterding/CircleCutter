@@ -1,9 +1,12 @@
-SplicePlot
+CircleCutter
+Modified version of splicePlot for circRNA
 =========
+** Log
+* 20171003
+- Initial fork from SplicePlot (https://github.com/wueric/SplicePlot)
+- test with revised version of sashimi_plot_utils.py
 
-hive plot, structure plot, and sashmi plot drawing tool for alternative splicing visualization
-
-Dependencies:
+** Dependencies:
 
 Python 2.7
 

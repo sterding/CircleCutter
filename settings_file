@@ -162,10 +162,10 @@ key_text_color = '#000000'
 draw_sashimi_plot = True
 
 # width of the sashimi plot, in inches
-width = 4
+width = 10
 
 # height of the sashimi plot, in inches
-height = 2.5
+height = 6
 
 # title. None means no title, '' means use default title, 'asdf' means title is 'asdf', etc
 plot_title = None

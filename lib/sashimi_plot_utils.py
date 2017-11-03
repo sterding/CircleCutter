@@ -85,10 +85,46 @@ def plot_density_single(read_depth_object, sample_label,
             tmp.extend([s, e])
         sslists.append(tmp)
 
-    # sort the junctions by intron length for better plotting look
-    jxns_sorted_list = sorted(jxns.keys(),cmp=junc_comp_function)
+    # # sort the junctions by intron length for better plotting look
+    # jxns_sorted_list = sorted(jxns.keys(),cmp=junc_comp_function)
+    # current_height = -3 * ymin / 4
+    # for plotted_count, jxn in enumerate(jxns_sorted_list):
+    #     leftss, rightss = map(int, jxn.split(":")[1].split("-"))
+    # 
+    #     ss1, ss2 = [graphcoords[leftss - tx_start - 1],\
+    #         graphcoords[rightss - tx_start]]
+    # 
+    #     mid = (ss1 + ss2) / 2
+    # 
+    #     # draw junction on bottom
+    #     if plotted_count % 2 == 1:
+    #         pts = [(ss1, 0), (ss1, -current_height), (ss2, -current_height), (ss2, 0)]
+    #         midpt = cubic_bezier(pts, .5)
+    # 
+    #     # draw junction on top
+    #     else:
+    #         leftdens = wiggle[leftss - tx_start - 1]
+    #         rightdens = wiggle[rightss - tx_start]
+    # 
+    #         pts = [(ss1, leftdens),
+    #                (ss1, leftdens + current_height),
+    #                (ss2, rightdens + current_height),
+    #                (ss2, rightdens)]
+    #         midpt = cubic_bezier(pts, .5)
+    # 
+    #     if number_junctions:
+    #         text(midpt[0], midpt[1], '{0}'.format(round(jxns[jxn],2)),
+    #              fontsize=numbering_font_size, ha='center', va='center', backgroundcolor='w')
+    # 
+    #     a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+    #     p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) /\
+    #         log(junction_log_base), fc='none')
+    #     axvar.add_patch(p)
+
+    # draw linear junction on top
+    jxns_list = jxns.keys()
     current_height = -3 * ymin / 4
-    for plotted_count, jxn in enumerate(jxns_sorted_list):
+    for plotted_count, jxn in enumerate(jxns_list):
         leftss, rightss = map(int, jxn.split(":")[1].split("-"))
 
         ss1, ss2 = [graphcoords[leftss - tx_start - 1],\
@@ -96,21 +132,15 @@ def plot_density_single(read_depth_object, sample_label,
 
         mid = (ss1 + ss2) / 2
 
-        # draw junction on bottom
-        if plotted_count % 2 == 1:
-            pts = [(ss1, 0), (ss1, -current_height), (ss2, -current_height), (ss2, 0)]
-            midpt = cubic_bezier(pts, .5)
+        # draw all linear junctions on top
+        leftdens = wiggle[leftss - tx_start - 1]
+        rightdens = wiggle[rightss - tx_start]
 
-        # draw junction on top
-        else:
-            leftdens = wiggle[leftss - tx_start - 1]
-            rightdens = wiggle[rightss - tx_start]
-
-            pts = [(ss1, leftdens),
-                   (ss1, leftdens + current_height),
-                   (ss2, rightdens + current_height),
-                   (ss2, rightdens)]
-            midpt = cubic_bezier(pts, .5)
+        pts = [(ss1, leftdens),
+               (ss1, leftdens + current_height),
+               (ss2, rightdens + current_height),
+               (ss2, rightdens)]
+        midpt = cubic_bezier(pts, .5)
 
         if number_junctions:
             text(midpt[0], midpt[1], '{0}'.format(round(jxns[jxn],2)),
@@ -118,6 +148,30 @@ def plot_density_single(read_depth_object, sample_label,
 
         a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
         p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) /\
+            log(junction_log_base), fc='none')
+        axvar.add_patch(p)
+
+    # draw circular junction on bottom
+    jxns_list = jxns.keys()
+    for plotted_count, jxn in enumerate(jxns_list):
+        leftss, rightss = map(int, jxn.split(":")[1].split("-"))
+
+        ss1, ss2 = [graphcoords[leftss - tx_start - 1],\
+            graphcoords[rightss - tx_start]]
+
+        mid = (ss1 + ss2) / 2
+
+        # test: draw all linear junctions on bottom
+        current_height = -3 * ymin / 4
+        pts = [(ss1, 0), (ss1, -current_height), (ss2, -current_height), (ss2, 0)]
+        midpt = cubic_bezier(pts, .5)
+
+        if number_junctions:
+            text(midpt[0], midpt[1], '{0}'.format(round(jxns[jxn],2)),
+                 fontsize=numbering_font_size, ha='center', va='center', backgroundcolor='w')
+
+        a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+        p = PathPatch(a, ec='blue', lw=log(jxns[jxn] + 1) /\
             log(junction_log_base), fc='none')
         axvar.add_patch(p)
 
