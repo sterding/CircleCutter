@@ -2,7 +2,7 @@
 [hive_plot]
 
 # Whether or not a hive plot will be drawn
-draw_hive_plot = True
+draw_hive_plot = False
 
 # size of the plot in inches
 dimension = 8
@@ -82,7 +82,7 @@ key_text_color = '#000000'
 [struct_plot]
 
 # basic settings
-draw_struct_plot = True
+draw_struct_plot = False
 
 # dimensions in inches
 plot_width=9.2
@@ -162,13 +162,13 @@ key_text_color = '#000000'
 draw_sashimi_plot = True
 
 # width of the sashimi plot, in inches
-width = 10
+width = 9
 
 # height of the sashimi plot, in inches
-height = 6
+height = 8
 
 # title. None means no title, '' means use default title, 'asdf' means title is 'asdf', etc
-plot_title = None
+plot_title = ''
 
 # scaling factor for intronic regions. A larger intron_scale makes the intronic regions smaller
 intron_scale = 15
@@ -181,23 +181,30 @@ exon_scale = 1
 colors = ['#FF8000','#00C866','#3399FF']
 
 # maximum value on the y-scale
-ymax = 1800
+# ymax = 1000
 
 # determines whether the average junction-spanning read counts are shown
-number_junctions=True
+number_junctions = True
 
 # determine the font size of the numbering for the junction-spanning reads
-numbering_font_size = 6
-
-resolution=0.5
+numbering_font_size = 7
 
 # determines the thickness of the junction-spanning beziers
-junction_log_base = 10
+junction_log_base = 11
+
+# filter circcle RNA junction
+min_circRNA_depth = 0.03
+
+# filter out the lowly expressed exon-exon junction
+min_exon_junction = 0.03
+
+# determines whether display the circ-RNA dividually or not
+sum_circRNA_expression = True
 
 # determines whether to reverse the plot if features are on the - strand
 reverse_minus = False
 
-font_size = 6
+font_size = 7
 
 # number of ticks on the y-axis
 nyticks = 2

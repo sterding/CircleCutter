@@ -105,7 +105,7 @@ def default_sashimi_settings():
     sashimi_settings['colors'] = ['#FF0000','#00FF00','#0000FF'] 
     sashimi_settings['ymax'] = None
     sashimi_settings['number_junctions'] = True
-    sashimi_settings['resolution'] = 0.5
+    # sashimi_settings['resolution'] = 0.5
     sashimi_settings['junction_log_base'] = 10
     sashimi_settings['reverse_minus'] = False
     sashimi_settings['font_size'] = 6
@@ -114,8 +114,10 @@ def default_sashimi_settings():
     sashimi_settings['show_ylabel'] = True
     sashimi_settings['show_xlabel'] = True
     sashimi_settings['plot_title'] = None
-    sashimi_settings['numbering_font_size']=6
-
+    sashimi_settings['numbering_font_size'] = 6
+    sashimi_settings['min_circRNA_depth'] = 0.5
+    sashimi_settings['min_exon_junction'] = 0.5
+    sashimi_settings['sum_circRNA_expression'] = True
     return sashimi_settings
 
 
@@ -317,7 +319,7 @@ def parse_sashimi_settings(config_parser):
                     'intron_scale',
                     'exon_scale',
                     'ymax',
-                    'resolution',
+                    # 'resolution',
                     'junction_log_base',
                     'font_size',
                     'numbering_font_size'])
@@ -342,6 +344,10 @@ def parse_sashimi_settings(config_parser):
             settings[option] = config_parser.getboolean('sashimi_plot',option)
         elif option in OTHER_PARAMS:
             settings[option] = ast.literal_eval(config_parser.get('sashimi_plot',option))
+
+    settings['min_circRNA_depth'] = config_parser.getfloat('sashimi_plot', 'min_circRNA_depth')
+    settings['min_exon_junction'] = config_parser.getfloat('sashimi_plot', 'min_exon_junction')
+    settings['sum_circRNA_expression'] = config_parser.getboolean('sashimi_plot', 'sum_circRNA_expression')
 
     return settings
 

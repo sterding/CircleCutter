@@ -21,14 +21,27 @@ class mRNAsObject:
 
         exon_starts = []
         exon_ends = []
+        exon_list = []
 
         for possible_mRNA in mRNAs:
-            for exon_coordinate_list in possible_mRNA:
-                exon_starts.append(exon_coordinate_list[0])
-                exon_ends.append(exon_coordinate_list[1])
+            for temp_exon in possible_mRNA:
+                if temp_exon not in exon_list:
+                    exon_list.append(temp_exon)
+        # print exon_list
+        for temp_exon in exon_list:
+            exon_starts.append(temp_exon[0])
+            exon_ends.append(temp_exon[1])
 
-        self.exon_starts = sorted(list(set(exon_starts)))
-        self.exon_ends = sorted(list(set(exon_ends)))
+        self.exon_starts = exon_starts
+        self.exon_ends = exon_ends
+
+        # for possible_mRNA in mRNAs:
+        #     for exon_coordinate_list in possible_mRNA:
+        #         exon_starts.append(exon_coordinate_list[0])
+        #         exon_ends.append(exon_coordinate_list[1])
+
+        # self.exon_starts = sorted(list(set(exon_starts)))
+        # self.exon_ends = sorted(list(set(exon_ends)))
 
     def __str__(self):
         return '{0}:{1}-{2}{3},{4}'.format(self.chrm,self.low,self.high,self.strand,self.mRNAs)

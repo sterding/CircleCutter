@@ -12,13 +12,15 @@ from mRNAsObject import mRNAsObject
 def plot_density_single(read_depth_object, sample_label,
                         mRNAs, strand,
                         graphcoords, graphToGene, axvar,
+                        min_circRNA_depth,min_exon_junction,
+                        sum_circRNA_expression,
                         paired_end=False,
                         intron_scale=30,
                         exon_scale=4,
                         color='r',
                         ymax=None,
                         number_junctions=True,
-                        resolution=.5,
+                        # resolution=.5,
                         showXaxis=True,
                         showYaxis=True,
                         nyticks=3,
@@ -54,6 +56,59 @@ def plot_density_single(read_depth_object, sample_label,
     chrom = read_depth_object.chrm
     wiggle = read_depth_object.wiggle
     jxns = read_depth_object.junctions_dict
+    circRNA_ = read_depth_object.circRNA
+    # print circRNA_
+    # print sum_circRNA_expression
+    if sum_circRNA_expression == False:
+        circRNA = sorted(circRNA_.items(), key=lambda item:item[1])
+    else:
+        if circRNA_ == {}:
+            circRNA = []
+        else:
+            circRNA_sorted = sorted(circRNA_.items(), key=lambda item:item[1])
+            # print circRNA_sorted
+            name = circRNA_sorted[0][0].split(':')[0]
+            circRNA_all = []
+            for idx in range(len(circRNA_sorted)):
+                temp_circRNA = [0 for i in range(4)]
+                temp_circRNA[0] = int(circRNA_sorted[idx][0].split(':')[1].split('-')[0])
+                temp_circRNA[1] = int(circRNA_sorted[idx][0].split(':')[1].split('-')[1])
+                temp_circRNA[2] = circRNA_sorted[idx][1]
+                temp_circRNA[3] = -1
+                circRNA_all.append(temp_circRNA)
+            for i in range(len(circRNA_all)):
+                start_idx = circRNA_all[i][0]
+                end_idx = circRNA_all[i][1]
+                if circRNA_all[i][3] != -1:
+                    continue
+                circRNA_all[i][3] = i
+                for j in range(i+1, len(circRNA_all)):
+                    if circRNA_all[j][0] == start_idx and circRNA_all[j][3] == -1:
+                        circRNA_all[j][3] = i
+                for k in range(i+1, len(circRNA_all)):
+                    if circRNA_all[k][1] == end_idx and circRNA_all[k][3] == -1:
+                        circRNA_all[k][3] = i
+            # print circRNA_all
+            for flag in range(len(circRNA_all)):
+                value_sum = 0.0
+                for idx in range(len(circRNA_all)):
+                    if circRNA_all[idx][3] == flag:
+                        value_sum += circRNA_all[idx][2]
+                for idxx in range(len(circRNA_all)):
+                    if  circRNA_all[idxx][3] == flag:
+                        circRNA_all[idxx][2] = value_sum
+            # print circRNA_all
+            circRNA = []
+            index = 0
+            for idx_ in range(len(circRNA_all)):
+                temp = []
+                tempName = name + ':' + str(circRNA_all[idx_][0]) +'-'+ str(circRNA_all[idx_][1])
+                temp.append(tempName)
+                temp.append(circRNA_all[idx_][2])
+                circRNA.append(temp)
+                index += 1
+
+    print circRNA
 
     maxheight = max(wiggle)
     if ymax is None:
@@ -69,11 +124,11 @@ def plot_density_single(read_depth_object, sample_label,
     tmpval = []
     for i in range(len(graphcoords)):
         tmpval.append(wiggle[i])
-        if abs(graphcoords[i] - prevx) > resolution:
-            compressed_wiggle.append(mean(tmpval))
-            compressed_x.append(prevx)
-            prevx = graphcoords[i]
-            tmpval = []
+        # if abs(graphcoords[i] - prevx) > resolution:
+        compressed_wiggle.append(mean(tmpval))
+        compressed_x.append(prevx)
+        prevx = graphcoords[i]
+        tmpval = []
 
     fill_between(compressed_x, compressed_wiggle,\
         y2=0, color=color, lw=0)
@@ -85,46 +140,12 @@ def plot_density_single(read_depth_object, sample_label,
             tmp.extend([s, e])
         sslists.append(tmp)
 
-    # # sort the junctions by intron length for better plotting look
-    # jxns_sorted_list = sorted(jxns.keys(),cmp=junc_comp_function)
-    # current_height = -3 * ymin / 4
-    # for plotted_count, jxn in enumerate(jxns_sorted_list):
-    #     leftss, rightss = map(int, jxn.split(":")[1].split("-"))
-    # 
-    #     ss1, ss2 = [graphcoords[leftss - tx_start - 1],\
-    #         graphcoords[rightss - tx_start]]
-    # 
-    #     mid = (ss1 + ss2) / 2
-    # 
-    #     # draw junction on bottom
-    #     if plotted_count % 2 == 1:
-    #         pts = [(ss1, 0), (ss1, -current_height), (ss2, -current_height), (ss2, 0)]
-    #         midpt = cubic_bezier(pts, .5)
-    # 
-    #     # draw junction on top
-    #     else:
-    #         leftdens = wiggle[leftss - tx_start - 1]
-    #         rightdens = wiggle[rightss - tx_start]
-    # 
-    #         pts = [(ss1, leftdens),
-    #                (ss1, leftdens + current_height),
-    #                (ss2, rightdens + current_height),
-    #                (ss2, rightdens)]
-    #         midpt = cubic_bezier(pts, .5)
-    # 
-    #     if number_junctions:
-    #         text(midpt[0], midpt[1], '{0}'.format(round(jxns[jxn],2)),
-    #              fontsize=numbering_font_size, ha='center', va='center', backgroundcolor='w')
-    # 
-    #     a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
-    #     p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) /\
-    #         log(junction_log_base), fc='none')
-    #     axvar.add_patch(p)
-
-    # draw linear junction on top
-    jxns_list = jxns.keys()
+    # sort the junctions by intron length for better plotting look
+    jxns_sorted_list = sorted(jxns.keys(),cmp=junc_comp_function)
     current_height = -3 * ymin / 4
-    for plotted_count, jxn in enumerate(jxns_list):
+    # plot junction on the top part
+    for plotted_count, jxn in enumerate(jxns_sorted_list):
+        # print plotted_count, jxn, jxns[jxn]
         leftss, rightss = map(int, jxn.split(":")[1].split("-"))
 
         ss1, ss2 = [graphcoords[leftss - tx_start - 1],\
@@ -132,60 +153,78 @@ def plot_density_single(read_depth_object, sample_label,
 
         mid = (ss1 + ss2) / 2
 
-        # draw all linear junctions on top
+        label_x = (ss1+ss2)/2
+
         leftdens = wiggle[leftss - tx_start - 1]
         rightdens = wiggle[rightss - tx_start]
 
         pts = [(ss1, leftdens),
-               (ss1, leftdens + current_height),
-               (ss2, rightdens + current_height),
-               (ss2, rightdens)]
+                ((ss1+ss2)/2, (leftdens +rightdens + 2*current_height)/2),
+                (ss2, rightdens)]
         midpt = cubic_bezier(pts, .5)
+        label_y = (leftdens +rightdens + 2*current_height)/2
 
-        if number_junctions:
-            text(midpt[0], midpt[1], '{0}'.format(round(jxns[jxn],2)),
+        # print min_exon_junction
+        if number_junctions and jxns[jxn] >= min_exon_junction:
+            text(label_x, label_y, '{0}'.format(round(jxns[jxn],2)),
                  fontsize=numbering_font_size, ha='center', va='center', backgroundcolor='w')
+        
+        # a = Path(pts, [Path.MOVETO, Path.LINETO, Path.LINETO])
+        # set minimum junction_log_base
+        if min_exon_junction >= 1.0 and jxns[jxn] >= min_exon_junction:
+            a = Path(pts, [Path.MOVETO, Path.LINETO, Path.LINETO])
+            p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) / log(junction_log_base), fc='none')
+            axvar.add_patch(p)
+        elif min_exon_junction < 1.0:
+            if jxns[jxn] > min_exon_junction and jxns[jxn] <= 1.0:
+                temp_junction_log_base = 1.3
+                a = Path(pts, [Path.MOVETO, Path.LINETO, Path.LINETO])
+                p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) / log(temp_junction_log_base), fc='none')
+                axvar.add_patch(p)
+            elif jxns[jxn] > 1.0:
+                a = Path(pts, [Path.MOVETO, Path.LINETO, Path.LINETO])
+                p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) / log(junction_log_base), fc='none')
+                axvar.add_patch(p)
 
-        a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
-        p = PathPatch(a, ec=color, lw=log(jxns[jxn] + 1) /\
-            log(junction_log_base), fc='none')
-        axvar.add_patch(p)
-
-    # draw circular junction on bottom
-    jxns_list = jxns.keys()
-    for plotted_count, jxn in enumerate(jxns_list):
-        leftss, rightss = map(int, jxn.split(":")[1].split("-"))
-
-        ss1, ss2 = [graphcoords[leftss - tx_start - 1],\
-            graphcoords[rightss - tx_start]]
+    # plot circRNA on the bottom part
+    for plotted_count, rna in enumerate(circRNA):
+        # print plotted_count, rna
+        leftss, rightss = map(int, rna[0].split(":")[1].split("-"))
+        ss1, ss2 = [graphcoords[leftss - tx_start - 1], graphcoords[rightss - tx_start]]
 
         mid = (ss1 + ss2) / 2
+        label_x = (ss1+ss2)/2
 
-        # test: draw all linear junctions on bottom
-        current_height = -3 * ymin / 4
-        pts = [(ss1, 0), (ss1, -current_height), (ss2, -current_height), (ss2, 0)]
-        midpt = cubic_bezier(pts, .5)
+        pts = [(ss1, 0), (ss1, -current_height*1.2), (ss2, -current_height*1.2), (ss2, 0)]
+        midpt = cubic_bezier4(pts, .5)
+        label_y = -current_height
 
-        if number_junctions:
-            text(midpt[0], midpt[1], '{0}'.format(round(jxns[jxn],2)),
+        if number_junctions and rna[1] >= min_circRNA_depth:
+            text(label_x, label_y, '{0}'.format(round(rna[1],2)),
                  fontsize=numbering_font_size, ha='center', va='center', backgroundcolor='w')
+        # print min_circRNA_depth
+        if min_circRNA_depth >= 1.0 and rna[1] >= min_circRNA_depth:
+            a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+            p = PathPatch(a, ec=color, lw=log(rna[1] + 1) / log(junction_log_base), fc='none')
+            axvar.add_patch(p)
+        elif min_circRNA_depth < 1.0:
+            if rna[1] > min_circRNA_depth and rna[1] <= 1.0:
+                temp_junction_log_base = 1.3
+                a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+                p = PathPatch(a, ec=color, lw=log(rna[1] + 1) / log(temp_junction_log_base), fc='none')
+                axvar.add_patch(p)
+            elif rna[1] > 1.0:
+                a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
+                p = PathPatch(a, ec=color, lw=log(rna[1] + 1) / log(junction_log_base), fc='none')
+                axvar.add_patch(p)
 
-        a = Path(pts, [Path.MOVETO, Path.CURVE4, Path.CURVE4, Path.CURVE4])
-        p = PathPatch(a, ec='blue', lw=log(jxns[jxn] + 1) /\
-            log(junction_log_base), fc='none')
-        axvar.add_patch(p)
-
-    # Format plot
-    # ylim(ymin, ymax)
-    # axvar.spines['left'].set_bounds(0, ymax)
     axvar.spines['right'].set_color('none')
     axvar.spines['top'].set_color('none')
 
     if showXaxis:
         axvar.xaxis.set_ticks_position('bottom')
-        xlabel('Genomic coordinate (%s), "%s" strand'%(chrom,
-                                                       strand),
-               fontsize=font_size)
+        xlabel('Genomic coordinate (%s), "%s" strand'%(chrom, strand), fontsize=font_size)
+
         max_graphcoords = max(graphcoords) - 1
         xticks(linspace(0, max_graphcoords, nxticks),
                [graphToGene[int(x)] for x in \
@@ -196,20 +235,18 @@ def plot_density_single(read_depth_object, sample_label,
         xticks([])
 
     xlim(0, max(graphcoords))
-    # Return modified axis
     return axvar
 
 
-
 # Plot density for a series of bam files.
-def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_list):
+def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_list,genotype_dict_counts):
 
     intron_scale = settings["intron_scale"]
     exon_scale = settings["exon_scale"]
     colors = settings["colors"]
     ymax = settings["ymax"]
     number_junctions = settings["number_junctions"]
-    resolution = settings["resolution"]
+    # resolution = settings["resolution"]
     junction_log_base = settings["junction_log_base"]
     reverse_minus = settings["reverse_minus"]
     font_size = settings["font_size"]
@@ -219,7 +256,10 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
     show_xlabel = settings["show_xlabel"]
     plot_title = settings["plot_title"]
     numbering_font_size = settings["numbering_font_size"]
-
+    min_circRNA_depth = settings["min_circRNA_depth"]
+    min_exon_junction = settings["min_exon_junction"]
+    sum_circRNA_expression = settings["sum_circRNA_expression"]
+    # print min_circRNA_depth,min_exon_junction
     # Always show y-axis for read densities for now
     showYaxis = True
     
@@ -236,6 +276,7 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
     graphcoords, graphToGene = getScaling(tx_start, tx_end, strand,
                                           exon_starts, exon_ends, intron_scale,
                                           exon_scale, reverse_minus)
+    # print graphcoords
 
     nfiles = len(read_depths_dict.keys())
 
@@ -261,12 +302,11 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
         else:
             showXaxis = True 
 
-        ax1 = subplot2grid((nfiles + 2, 1), (i,0),
-                            colspan=1)
+        ax1 = subplot2grid((nfiles + 2, 1), (i,0), colspan=1)
         
         # Read sample label
         sample_label = group_genotype
-        labels_list.append(group_genotype)
+        labels_list.append(group_genotype+' (n = '+str(genotype_dict_counts[group_genotype])+')')
 
         plotted_ax = plot_density_single(read_depth_object=average_read_depth,
                         sample_label=sample_label,
@@ -278,7 +318,7 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
                         color=color,
                         ymax=ymax,
                         number_junctions=number_junctions,
-                        resolution=resolution,
+                        # resolution=resolution,
                         showXaxis=showXaxis,
                         showYaxis=showYaxis,
                         nyticks=nyticks,
@@ -287,11 +327,12 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
                         show_xlabel=show_xlabel,
                         font_size=font_size,
                         numbering_font_size=numbering_font_size,
-                        junction_log_base=junction_log_base)
+                        junction_log_base=junction_log_base,
+                        min_circRNA_depth=min_circRNA_depth,
+                        min_exon_junction=min_exon_junction,
+                        sum_circRNA_expression=sum_circRNA_expression)
 
         plotted_axes.append(plotted_ax)
-
-
 
     ##
     ## Figure out correct y-axis values
@@ -305,13 +346,13 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
         # maximum y across all.
         used_yvals = [curr_ax.get_ylim()[1] for curr_ax in plotted_axes]
         # Round up
-        max_used_yval = math.ceil(max(used_yvals))
+        max_used_yval = 10*math.ceil(max(used_yvals)*0.1)
 
     # Reset axes based on this.
     # Set fake ymin bound to allow lower junctions to be visible
     fake_ymin = -0.5 * max_used_yval
-    universal_yticks = linspace(0, max_used_yval,
-                                nyticks + 1)
+    universal_yticks = linspace(0, max_used_yval, nyticks + 1)
+
     # Round up yticks
     universal_ticks = map(math.ceil, universal_yticks)
     for sample_num, curr_ax in enumerate(plotted_axes):
@@ -327,18 +368,14 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
                         curr_yticklabels.append("%.1f" %(label))
                     else:
                         curr_yticklabels.append("%d" %(label))
-            curr_ax.set_yticklabels(curr_yticklabels,
-                                    fontsize=font_size)
+            curr_ax.set_yticklabels(curr_yticklabels, fontsize=font_size)
             curr_ax.spines["left"].set_bounds(0, max_used_yval)
             curr_ax.set_yticks(universal_yticks)
             curr_ax.yaxis.set_ticks_position('left')
             curr_ax.spines["right"].set_color('none')
             if show_ylabel:
                 y_horz_alignment = 'left'
-                curr_ax.set_ylabel('Depth',
-                                       fontsize=font_size,
-                                       va="center",
-                                       ha=y_horz_alignment,labelpad=10)
+                curr_ax.set_ylabel('Mean depth', fontsize=font_size, va="center", ha=y_horz_alignment,labelpad=10)
 
         else:
             curr_ax.spines["left"].set_color('none')
@@ -356,21 +393,15 @@ def plot_density(settings,event,read_depths_dict,mRNA_object,ordered_genotypes_l
         else:
             label_ypos = universal_yticks[-1]
         curr_label = labels_list[sample_num]
-        curr_ax.text(max(graphcoords), label_ypos,
-                     curr_label,
-                     fontsize=font_size,
-                     va='bottom',
-                     ha='right',
-                     color=sample_color)
+        label_ypos = label_ypos * 1.2
+        curr_ax.text(max(graphcoords), label_ypos, curr_label, 
+            fontsize=font_size, va='bottom', ha='right', color=sample_color)
                 
 
     # Draw gene structure
-    ax1 = subplot2grid((nfiles + 2, 1), (nfiles,0),
-                            colspan=1,rowspan=2)
+    ax1 = subplot2grid((nfiles + 2, 1), (nfiles,0), colspan=1,rowspan=2)
     plot_mRNAs(tx_start, mRNAs, strand, graphcoords, reverse_minus)
     subplots_adjust(hspace=.1, wspace=.7)
-
-
 
 
 def getScaling(tx_start, tx_end, strand, exon_starts, exon_ends,
@@ -378,7 +409,10 @@ def getScaling(tx_start, tx_end, strand, exon_starts, exon_ends,
     """
     Compute the scaling factor across various genic regions.
     """
-   
+    # print tx_start, tx_end, strand
+    # print exon_starts, exon_ends
+    # print intron_scale, exon_scale, reverse_minus
+
     exoncoords = zeros((tx_end - tx_start + 1))
     for i in range(len(exon_starts)):
         exoncoords[exon_starts[i] - tx_start : exon_ends[i] - tx_start] = 1
@@ -405,8 +439,6 @@ def getScaling(tx_start, tx_end, strand, exon_starts, exon_ends,
     return graphcoords, graphToGene
 
 
-
-
 def plot_mRNAs(tx_start, mRNAs, strand, graphcoords, reverse_minus):
     """
     Draw the gene structure.
@@ -416,9 +448,11 @@ def plot_mRNAs(tx_start, mRNAs, strand, graphcoords, reverse_minus):
     narrows = 50
 
     for mRNA in mRNAs:
+        # print mRNA
         for s, e in mRNA:
             s = s - tx_start
             e = e - tx_start
+            # print graphcoords[s], graphcoords[e]
             x = [graphcoords[s], graphcoords[e], graphcoords[e], graphcoords[s]]
             y = [yloc - exonwidth / 2, yloc - exonwidth / 2,\
                 yloc + exonwidth / 2, yloc + exonwidth / 2]
@@ -449,6 +483,14 @@ def plot_mRNAs(tx_start, mRNAs, strand, graphcoords, reverse_minus):
 
 
 def cubic_bezier(pts, t):
+
+    p0, p1, p2 =pts
+    p0 = array(p0)
+    p1 = array(p1)
+    p2 = array(p2)
+    return p0 * (1 - t)**3 + 3 * t * p1 * (1 - t) ** 2 + t**3 * p2
+
+def cubic_bezier4(pts, t):
     """
     Get points in a cubic bezier.
     """
@@ -457,10 +499,9 @@ def cubic_bezier(pts, t):
     p1 = array(p1)
     p2 = array(p2)
     p3 = array(p3)
-    return p0 * (1 - t)**3 + 3 * t * p1 * (1 - t) ** 2 + \
-        3 * t**2 * (1 - t) * p2 + t**3 * p3
+    return p0 * (1 - t)**3 + 3 * t * p1 * (1 - t) ** 2 + 3 * t**2 * (1 - t) * p2 + t**3 * p3
 
-def draw_sashimi_plot(output_file_path,settings,var_pos,average_depths_dict,mRNAs_object,ordered_genotypes_list):
+def draw_sashimi_plot(output_file_path,settings,var_pos,average_depths_dict,mRNAs_object,ordered_genotypes_list,genotype_dict_counts):
 
     '''
         draw_sashimi_plot draws the complete sashimi plot
@@ -478,12 +519,11 @@ def draw_sashimi_plot(output_file_path,settings,var_pos,average_depths_dict,mRNA
 
         plot_title is the title of the plot
 
-
         return values:
             None. Draws sashimi plot
 
     '''
 
     plt.figure(figsize=[settings['width'],settings['height']])
-    plot_density(settings,var_pos,average_depths_dict,mRNAs_object,ordered_genotypes_list)
+    plot_density(settings,var_pos,average_depths_dict,mRNAs_object,ordered_genotypes_list,genotype_dict_counts)
     plt.savefig(output_file_path,transparent=True)

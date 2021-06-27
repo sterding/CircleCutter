@@ -1,8 +1,10 @@
 import pysam
 import pandas
 import cPickle as pickle
+from lib.ReadGTF import readGTF
 from lib.ReadDepth import ReadDepth
 from lib.mRNAsObject import mRNAsObject
+from collections import Counter
 import argparse
 import os
 
@@ -91,7 +93,7 @@ class VCFLine:
         
         
 
-def average_read_depth_by_genotype(read_depth_dict,vcf_file_name,var_pos):
+def average_read_depth_by_genotype(read_depth_dict,vcf_file_name,var_pos,circ_rna_data,circ_rna_junc):
     '''
         average_read_depth_by_genotype averages the ReadDepth objects in read_depth_dict based on the genotype
             in a .vcf file
@@ -115,15 +117,14 @@ def average_read_depth_by_genotype(read_depth_dict,vcf_file_name,var_pos):
     '''
 
     try:
-        vcf_line = VCFLine(vcf_file_name,var_pos)
-
+    	vcf_line = VCFLine(vcf_file_name,var_pos)
         possible_genotypes_bucket_counts = {}
         average_read_depths_dict = {}
         genotypes_in_data = set()
         genotype_by_id = {}
         for indiv_id, read_depth_object in read_depth_dict.items():
             if indiv_id in vcf_line:
-                indiv_genotype = vcf_line[indiv_id]
+                indiv_genotype = vcf_line[indiv_id] #GG GT TT
                 genotype_by_id[indiv_id] = indiv_genotype
                 genotypes_in_data.add(indiv_genotype)
 
@@ -134,11 +135,48 @@ def average_read_depth_by_genotype(read_depth_dict,vcf_file_name,var_pos):
                     possible_genotypes_bucket_counts[indiv_genotype] += 1
                     average_read_depths_dict[indiv_genotype] = average_read_depths_dict[indiv_genotype] + read_depth_object
 
+        genotype_info = average_read_depths_dict.keys()
+        # print genotype_info
+
+        # print len(genotype_by_id), len(circ_rna_data) # 84 97
+        # print circ_rna_data, circ_rna_junc
+        if circ_rna_data != None and circ_rna_junc != None:
+	        for idxx in range(len(circ_rna_data)):
+	            circ_rna_data_ = circ_rna_data[idxx]
+	            circ_rna_junc_ = circ_rna_junc[idxx]
+	            # print circ_rna_junc_, circ_rna_data_
+	            if circ_rna_data_ is not None and circ_rna_junc_ is not None:
+	                for genotype in genotype_info:
+	                    temp_count = 0
+	                    for idx in genotype_by_id.keys():
+	                        # print genotype_by_id[idx], genotype
+	                        if genotype_by_id[idx] == genotype:
+	                            if idx in circ_rna_data_.keys():
+	                                # print genotype_by_id[idx], genotype, idx, circ_rna_data_[idx]
+	                                temp_count += circ_rna_data_[idx]
+
+	                    temp_junction_circ = {}
+	                    temp_junction_circ[circ_rna_junc_] = temp_count
+	                    # print temp_junction_circ
+	                    # average_read_depths_dict[genotype].circRNA[idxx] = temp_junction_circ
+	                    average_read_depths_dict[genotype].circRNA.update(temp_junction_circ)
+	                    # print average_read_depths_dict[genotype].circRNA
+	        print average_read_depths_dict
+
         for genotype, counts in possible_genotypes_bucket_counts.items():
+            # print genotype, counts #GG 76 TT 1 GT 7
             average_read_depths_dict[genotype].divide_by_constant(counts)
+            # print average_read_depths_dict[genotype]
+
+        # normalize read depths
+        # print 'Normalizing average read depths...'
+        # for genotype in genotype_info:
+        #     dist = average_read_depths_dict[genotype].wiggle
+        #     dist_norm = [float(i)*1.5/max(dist) for i in dist]
+        #     average_read_depths_dict[genotype].wiggle = dist_norm
 
         filtered_genotypes_list = filter(lambda x: x in genotypes_in_data, vcf_line.genotypes_list())
-        return average_read_depths_dict, genotype_by_id, filtered_genotypes_list
+        return average_read_depths_dict, genotype_by_id, filtered_genotypes_list, possible_genotypes_bucket_counts
 
     except IOError:
         print 'There is no .vcf file at {0}'.format(vcf_file_name)
@@ -218,6 +256,7 @@ class Exon:
     def __str__(self):
         return '{0}:{1}-{2}{3}'.format(self.chrm,self.low,self.high,self.strand)
 
+
 class EvaluatedExon:
     def __init__(self,exon,value):
         self.exon = exon
@@ -233,129 +272,61 @@ class EvaluatedExon:
     def __str__(self):
         return '{0},{1}'.format(self.exon.__str__(), self.value)
 
-def get_splice_junc_coordinates(junction_name):
 
-    '''
-        get_splice_junc_coordinates takes in a junction name and returns the chromosome name,
-            the shared splicing site, and the other splicing sites
-
-        junction_name is a string containing the junction name, in the format "chr1:100-200,chr1:100-300"
-
-        return values:
-            chrom: a string containing the chromosome name
-            shared_site: an int containing the base number of the shared splice site
-            upper_ss: a list of ints containing the base numbers of the other splice sites
-    '''
+def get_splice_range_coordinates(range_name):
     try:
-        junctions_list = junction_name.split(',')
-        
-        chromosome_name_list = map(lambda x: x.split(':')[0], junctions_list)
-        if not all(x==chromosome_name_list[0] for x in chromosome_name_list):
-            raise Exception
+        chrom = range_name.split(':')[0]
+        start_idx, end_idx = map(int, range_name.split(':')[1].split('-'))
 
-        chrom = chromosome_name_list[0]
-
-        # figure out the shared splice site
-        splice_junc_coordinate_list = []
-        shared_site = None
-
-        lower_ss, upper_ss = [], []
-        for intronic_region in junctions_list:
-            low, high = map(int, intronic_region.split(':')[1].split('-'))
-            if low not in lower_ss:
-                lower_ss.append(low)
-            if high not in upper_ss:
-                upper_ss.append(high)
-
-        if len(upper_ss) == 1:
-            shared_site = upper_ss[0]
-            return chrom, shared_site, lower_ss
-
-        elif len(lower_ss) == 1:
-            shared_site = lower_ss[0]
-            return chrom, shared_site, upper_ss
-        else:
-            raise Exception
+        return chrom, start_idx, end_idx
     except:
-        print '{0} is not a valid junction name'.format(junction_name)
+        print '{0} is not a valid range name'.format(range_name)
         raise Exception
 
-
-def determine_exons_and_coordinates(gtf_file_name,chrom_name,shared_site,other_sites):
-
-    '''
-        determine_exons_and_coordinates creates a list of possible exons that could have been involved
-            the creating the junction, and gives the lower and upper coordinates of the region to search
-            for in the bam file
-
-        gtf_file_name is the file path for the gtf file
-        chrom_name is a string containing the chromosome name
-        shared_site is an integer representing the base number of the shared splice site
-        other_sites is a list of integers containing the base numbers of the other splice sites
-
-
-        return values:
-            min_coordinate is an int representing the lower border of the region to search in the bam files
-            max_coordinate is an int representing the upper border of the region to search in the bam files
-            filtered_exons_list is a list of Exon objects containing exons which could have been involved in
-                the splice junction
-
-    '''
-
-    exons_found_buckets = {shared_site:False}
-    for coordinate in other_sites:
-        exons_found_buckets[coordinate] = False
-
-    splice_junc_coordinate_list = [shared_site]
-    splice_junc_coordinate_list.extend(other_sites)
+                
+def determine_exons_and_coordinates(gtf_file, chrom, start_idx, end_idx):
 
     try:
-        gtf_tabix = pysam.Tabixfile(gtf_file_name,'r')
-        relevant_exons_iterator = gtf_tabix.fetch(chrom_name,min(splice_junc_coordinate_list)-1,max(splice_junc_coordinate_list)+1)
+        gtf_list = readGTF(gtf_file)
+        relevant_exons_iterator = []
+
+        for gtf_line in gtf_list:
+            # print gtf_line.start, gtf_line.end
+            if gtf_line.start >= start_idx and gtf_line.end <= end_idx:
+                relevant_exons_iterator.append(gtf_line)
+            elif gtf_line.start >= start_idx and gtf_line.start <= end_idx:
+                gtf_line.end = end_idx
+                relevant_exons_iterator.append(gtf_line)
+            elif gtf_line.end >= start_idx and gtf_line.end <= end_idx:
+                gtf_line.start = start_idx
+                relevant_exons_iterator.append(gtf_line)
 
         filtered_exons_list = []
         min_coordinate = float('inf')
         max_coordinate = float('-inf')
-        for exon_line in relevant_exons_iterator:
-            # shared_site coordinate < other_sites coordinates case
-            exon = Exon.create_from_gtf(exon_line)
-            if shared_site > other_sites[0]:
-                if exon.low == shared_site:
-                    filtered_exons_list.append(exon)
-                    exons_found_buckets[shared_site] = True
+        all_exons_idx = []
+        splice_junc_coordinate_list = []
 
-                    if exon.high > max_coordinate:
-                        max_coordinate = exon.high
+        for exon in relevant_exons_iterator:
+            print "exon:{}-{}".format(exon.start, exon.end)
+            filtered_exons_list.append(exon)
+            all_exons_idx.append(exon.start)
+            all_exons_idx.append(exon.end)
 
-                elif exon.high in other_sites:
-                    filtered_exons_list.append(exon)
-                    exons_found_buckets[exon.high] = True
-                
-                    if exon.low < min_coordinate:
-                        min_coordinate = exon.low
-            else:
-                if exon.high == shared_site:
-                    filtered_exons_list.append(exon)
-                    exons_found_buckets[shared_site] = True
+        min_coordinate = min(all_exons_idx)
+        max_coordinate = max(all_exons_idx)
+        shared_site = all_exons_idx[1]
+        other_sites = all_exons_idx[2::2]
 
-                    if exon.low < min_coordinate:
-                        min_coordinate = exon.low
-                elif exon.low in other_sites:
-                    filtered_exons_list.append(exon)
-                    exons_found_buckets[exon.low] = True
-                    
-                    if exon.high > max_coordinate:
-                        max_coordinate = exon.high
-
-        if min_coordinate == float('inf') or max_coordinate == float('-inf') or not all(exons_found_buckets[x] for x in exons_found_buckets):
-            print 'The given junction coordinates do not correspond to exons in the annotation'
+        if min_coordinate == float('inf') or max_coordinate == float('-inf'):
+            print 'The given range coordinates do not correspond to exons in the annotation'
             raise Exception
 
-        return min_coordinate, max_coordinate, filtered_exons_list
+        # print min_coordinate, max_coordinate, shared_site, other_sites
+        return min_coordinate, max_coordinate, shared_site, other_sites, filtered_exons_list
     except IOError:
-        print 'There is no gtf file at {0}'.format(gtf_file_name)
-        raise Exception
-                
+        print 'There is no gtf file at {0}'.format(gtf_file)
+        raise Exception 
 
 
 def initialize_read_depths_and_determine_exons(junction_name,gtf_file_name,bam_list,bam_to_id_dict):
@@ -378,64 +349,48 @@ def initialize_read_depths_and_determine_exons(junction_name,gtf_file_name,bam_l
             A mRNAsObject, which represents the set of possible mRNA segments determined from the junctions
     '''
 
-    chrom, shared_site, other_sites = get_splice_junc_coordinates(junction_name)
-    minimum_coordinate, maximum_coordinate, filtered_exons_list = determine_exons_and_coordinates(gtf_file_name,chrom,shared_site,other_sites)
+    chrom, start_idx, end_idx = get_splice_range_coordinates(junction_name)
 
-    splice_junc_coordinate_list = [shared_site]
-    splice_junc_coordinate_list.extend(other_sites)
+    minimum_coordinate,maximum_coordinate,shared_site,other_sites,filtered_exons_list = determine_exons_and_coordinates(gtf_file_name,chrom,start_idx,end_idx)
+
+    # print minimum_coordinate, maximum_coordinate
+    # print start_idx, end_idx
+    minimum_coordinate = start_idx
+    maximum_coordinate = end_idx
 
     read_depth_dict = {}
-    total_depth = ReadDepth.create_blank()
     for bam_file in bam_list:
         current_read_depth = ReadDepth.determine_depth(bam_file,chrom,minimum_coordinate,maximum_coordinate)
-
+        print bam_file
         read_depth_dict[bam_to_id_dict[bam_file]] = current_read_depth
-        total_depth = total_depth + current_read_depth
-
-    current_best_exon_by_coordinate = {}
-
-    for exon in filtered_exons_list:
-        prop_covered = exon.determine_average_coverage(total_depth)
-        current_exon_evaluated = EvaluatedExon(exon,prop_covered)
-
-        if exon.low in splice_junc_coordinate_list:
-            if exon.low not in current_best_exon_by_coordinate or current_exon_evaluated > current_best_exon_by_coordinate[exon.low]:
-                current_best_exon_by_coordinate[exon.low] = current_exon_evaluated
-        else:
-            if exon.high not in current_best_exon_by_coordinate or current_exon_evaluated > current_best_exon_by_coordinate[exon.high]:
-                current_best_exon_by_coordinate[exon.high] = current_exon_evaluated
-
-    # convert current_best_exon_by_coordinate into list format needed by plotter
+    
     mRNAs = []
+    resize_lower_bound = minimum_coordinate
+    resize_upper_bound = maximum_coordinate
 
-    # determine which exon is in all transcripts. Also determine boundaries for resizing the read depth objects to fit the exons
-    shared_exon = current_best_exon_by_coordinate[shared_site].exon
+    list_id = []
+    for i in range(len(filtered_exons_list)):
+        # print filtered_exons_list[i].ID
+        list_id.append(filtered_exons_list[i].ID)
+    id_count = Counter(list_id)
 
-    resize_lower_bound = float('inf')
-    resize_upper_bound = float('-inf')
+    exon = filtered_exons_list[0]
 
-    for key in sorted(current_best_exon_by_coordinate.keys()):
-        exon = current_best_exon_by_coordinate[key].exon
+    for key in id_count:
+        exon_splice = []
+        for idx in range(len(filtered_exons_list)):
+            temp_exon = [filtered_exons_list[idx].start, filtered_exons_list[idx].end]
+            if filtered_exons_list[idx].ID == key:
+                exon_splice.append(temp_exon)
 
-        if exon != shared_exon:
-            mRNA_segment = sorted([sorted([shared_exon.low,shared_exon.high]),sorted([exon.low,exon.high])],
-                                    cmp=lambda x, y: x[0] - y[0])
-            mRNAs.append(mRNA_segment)
-
-        if exon.low < resize_lower_bound:
-            resize_lower_bound = exon.low
-        if exon.high > resize_upper_bound:
-            resize_upper_bound = exon.high
-
-
+        mRNAs.append(exon_splice)
+   
     # resize each of the read depth objects so that their lengths correspond to the possible mRNAs
     for key in read_depth_dict:
         read_depth_dict[key].shrink(resize_lower_bound,resize_upper_bound)
 
-    mRNAs_info = mRNAsObject(exon.chrm,exon.strand,resize_lower_bound,resize_upper_bound,mRNAs)
-
+    mRNAs_info = mRNAsObject(exon.seqname,exon.strand,resize_lower_bound,resize_upper_bound,mRNAs)
     return read_depth_dict, mRNAs_info
-
 
 
 def create_data_frame(read_depth_dict,junction_name,var_pos,genotype_lookup_dict,filtered_genotypes_list):
@@ -498,22 +453,66 @@ def create_data_frame(read_depth_dict,junction_name,var_pos,genotype_lookup_dict
     new_col_order.extend(junctions_list)
     return df.reindex(columns=new_col_order)
 
-def calculate_average_expression_and_data_frame(var_pos,junction_name,vcf,annotation,map_file):
+
+def read_circ_rna(data_file, junction_name):
+    chrom, start_idx, end_idx = get_splice_range_coordinates(junction_name)
+    # print chrom, start_idx, end_idx
+
+    circRNA_all = {}
+    junctions_all = {}
+    try:
+        lines = open(data_file,'r').readlines()
+        genotype = lines[0].strip('\n').split()[1:]
+        # print genotype
+        index = 0
+        for idx_ in range(1, len(lines)):
+            circRNA = {}
+            temp_junction = None
+            read_count = lines[idx_].strip('\n').split()[1:]
+            junction = lines[idx_].strip('\n').split()[0]
+            for idx in range(len(genotype)):
+                temp_genotype = genotype[idx].split('_')[1]
+                circRNA[temp_genotype] = int(read_count[idx])
+
+            circ_start_idx = junction.split('_')[1]
+            circ_end_idx = junction.split('_')[2]
+            # print circ_start_idx, circ_end_idx
+            if int(circ_start_idx) >= int(start_idx) and int(circ_end_idx) <= int(end_idx):
+                temp_junction = junction.split('_')[0]+':'+junction.split('_')[1]+'-'+junction.split('_')[2]
+                circRNA_all[index] = circRNA
+                junctions_all[index] = temp_junction
+                index = index + 1
+        # print circRNA_all,junctions_all
+        return circRNA_all, junctions_all
+
+    except IOError:
+        print 'There is no circle RNA file at {0}'.format(data_file)
+        raise Exception
+
+
+def calculate_average_expression_and_data_frame(var_pos,junction_name,vcf,annotation,map_file,circ_rna_file):
+    #add read circle RNA data
+    if circ_rna_file is not None:
+        circ_rna_data, circ_rna_junc = read_circ_rna(circ_rna_file, junction_name)
+    else:
+        circ_rna_data = None
+        circ_rna_junc = None
+
+    # print circ_rna_data, circ_rna_junc
+
     bam_to_id_dict, bam_list = map_indiv_id_to_bam_name(map_file)
     
     read_depths_dict, mRNA_info_object = initialize_read_depths_and_determine_exons(junction_name,
         annotation,bam_list,bam_to_id_dict)
 
-    new_read_depths_dict = {}
-    for indiv_id, read_depth_object in read_depths_dict.items():
-        new_read_depths_dict[indiv_id] = read_depth_object.filter_junctions_dict_for_event(junction_name)
-
-    genotype_averages_dict, genotype_by_id, filtered_genotypes_list = average_read_depth_by_genotype(new_read_depths_dict,vcf,var_pos)
-
-
+    new_read_depths_dict = read_depths_dict
+    # print new_read_depths_dict
+    genotype_averages_dict, genotype_by_id, filtered_genotypes_list, genotype_dict_counts = average_read_depth_by_genotype(new_read_depths_dict,vcf,var_pos,circ_rna_data,circ_rna_junc)
+    # print genotype_averages_dict
     data_frame = create_data_frame(new_read_depths_dict,junction_name,var_pos,genotype_by_id,filtered_genotypes_list)
+    # print data_frame
 
-    return genotype_averages_dict, data_frame, mRNA_info_object, filtered_genotypes_list
+    return genotype_averages_dict, data_frame, mRNA_info_object, filtered_genotypes_list, genotype_dict_counts
 
 
 if __name__ == '__main__':
@@ -526,11 +525,15 @@ if __name__ == '__main__':
     parser.add_argument('--vcf',type=str,required=True,help='location of the vcf file')
     parser.add_argument('--gtf',type=str,required=True,help='location of the gtf file')
     parser.add_argument('--mf',type=str,required=True,help='location of the map file')
+    parser.add_argument('--circ',type=str,required=False,help='location of the circle-RNA file')
     parser.add_argument('--output',type=str,required=False,default=None,help='location of output pickle file. Optional parameter')
 
     args = parser.parse_args()
     try:
-        genotype_averages_dict, data_frame, mRNA_info_object, filtered_genotypes_list = calculate_average_expression_and_data_frame(args.varpos,args.junc,args.vcf,args.gtf,args.mf)
+        if args.circ is not None:
+            genotype_averages_dict, data_frame, mRNA_info_object, filtered_genotypes_list, genotype_dict_counts = calculate_average_expression_and_data_frame(args.varpos,args.junc,args.vcf,args.gtf,args.mf, args.circ)
+        else:
+            genotype_averages_dict, data_frame, mRNA_info_object, filtered_genotypes_list, genotype_dict_counts = calculate_average_expression_and_data_frame(args.varpos,args.junc,args.vcf,args.gtf,args.mf, None)
 
         output_file_path = '{0}/pickle_files/'.format(os.path.dirname(os.path.abspath(__file__)))
         if args.output is not None:
@@ -554,7 +557,6 @@ if __name__ == '__main__':
         if stem != '' and stem[len(stem)-1] != '/':
             stem = stem + '/'
 
-        # pickle the data
         pickle_file = open('{0}{1}'.format(stem,tail),'wb')
         pickle.dump(args.varpos,pickle_file)
         pickle.dump(args.junc,pickle_file)
@@ -562,7 +564,9 @@ if __name__ == '__main__':
         pickle.dump(mRNA_info_object,pickle_file)
         pickle.dump(data_frame,pickle_file)
         pickle.dump(filtered_genotypes_list,pickle_file)
+        pickle.dump(genotype_dict_counts, pickle_file)
 
         pickle_file.close()
+        print 'Done!'
     except:
         print 'Failed'

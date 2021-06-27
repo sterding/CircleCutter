@@ -3,13 +3,14 @@ import pysam
 
 class ReadDepth:
 
-    def __init__(self,chrm,low,high,wiggle,junctions_dict):
+    def __init__(self,chrm,low,high,wiggle,junctions_dict,circRNA):
         assert chrm == None or high - low + 1 == len(wiggle), 'Wiggle, lower bound, and upper bound do not correspond'
         self.low = low
         self.high = high
         self.chrm = chrm
         self.wiggle = wiggle
         self.junctions_dict = junctions_dict
+        self.circRNA = circRNA
 
     @classmethod
     def determine_depth(cls,bam_file_path,chrm,start_coord,end_coord):
@@ -26,13 +27,14 @@ class ReadDepth:
         '''
         try:
             bam_file = pysam.Samfile(bam_file_path,'rb')
+            #print bam_file_path
             relevant_reads = bam_file.fetch(reference=chrm,start=start_coord,end=end_coord)
 
             depth_vector = numpy.zeros(end_coord-start_coord+1,dtype='f')
             spanned_junctions = {}
 
             for read in relevant_reads:
-                
+              
                 # make sure that the read can be used
                 cigar_string = read.cigar
 
@@ -51,10 +53,15 @@ class ReadDepth:
                 if contains_indel:
                     continue
                     
+                #if bam_file_path == "/Users/xd010/neurogen/rnaseq_PD/run_output/HC_BN02-04_SNDA_5_rep1/uniq/accepted_hits.bam":
+                #    print "DEBUG: read{}:".format(read)
+                    
                 for index, base_position in enumerate(read.positions):
                     if base_position >= start_coord and base_position <= end_coord:
                         depth_vector[base_position-start_coord] += 1
 
+                    #if bam_file_path == "/Users/xd010/neurogen/rnaseq_PD/run_output/HC_BN02-04_SNDA_5_rep1/uniq/accepted_hits.bam":
+                    #    print format(index)
                     # junction spanning case
                     if (index+1) < len(read.positions) and base_position + 1 != read.positions[index+1]:
                         junction_name = '{0}:{1}-{2}'.format(chrm,base_position+1,read.positions[index+1]+1)
@@ -63,7 +70,8 @@ class ReadDepth:
 
                         spanned_junctions[junction_name] = spanned_junctions[junction_name] + 1
 
-            return cls(chrm,start_coord,end_coord,depth_vector,spanned_junctions)
+            circRNA_init = {}
+            return cls(chrm,start_coord,end_coord,depth_vector,spanned_junctions,circRNA_init)
         except IOError:
             print 'There is no .bam file at {0}'.format(bam_file_path)
             raise Exception
@@ -74,13 +82,13 @@ class ReadDepth:
         '''
             create_blank creates an instance of ReadDepth where all of the attributes are None
         '''
-        return cls(None,None,None,None,None)
+        return cls(None,None,None,None,None,None)
 
     def is_invalid(self):
         '''
             is_invalid determines whether any of the attributes are None
         '''
-        return self.chrm == None or self.low == None or self.high == None or self.wiggle == None or self.junctions_dict == None
+        return self.chrm is None or self.low is None or self.high is None or self.wiggle is None or self.junctions_dict is None
         
     def shrink(self,new_low,new_high):
 
@@ -128,7 +136,6 @@ class ReadDepth:
             return value:
                 A new ReadDepth object containing the sum of the two original ReadDepth objects
         '''
-
         if self.is_invalid():
             return other
         if other.is_invalid():
@@ -150,10 +157,12 @@ class ReadDepth:
             if key not in self.junctions_dict:
                 new_junctions_dict[key] = value
 
-        return ReadDepth(self.chrm,self.low,self.high,new_wiggle,new_junctions_dict)
+        self.wiggle = new_wiggle
+        self.junctions_dict = new_junctions_dict
+        return ReadDepth(self.chrm,self.low,self.high,self.wiggle,self.junctions_dict,self.circRNA)
 
     def __str__(self):
-        return '{0}:{1}-{2},{3},{4}'.format(self.chrm,self.low,self.high,self.wiggle,self.junctions_dict)
+        return '{0}:{1}-{2},{3},{4},{5}'.format(self.chrm,self.low,self.high,self.wiggle,self.junctions_dict,self.circRNA)
 
     def divide_by_constant(self,constant):
 
@@ -171,7 +180,16 @@ class ReadDepth:
         for key, value in self.junctions_dict.items():
             new_junctions_dict[key] = value * 1.0 / constant
 
-        return ReadDepth(self.chrm,self.low,self.high,new_wiggle,new_junctions_dict)
+        new_circRNA_dict = {}
+        for key,value in self.circRNA.items():
+            new_circRNA_dict[key] = value * 1.0 / constant
+            # new_circRNA_dict[key] = value * 1.0
+
+        self.wiggle = new_wiggle
+        self.junctions_dict = new_junctions_dict
+        self.circRNA = new_circRNA_dict
+
+        return ReadDepth(self.chrm,self.low,self.high,self.wiggle,self.junctions_dict,self.circRNA)
 
     def filter_junctions_dict_for_event(self,splice_event_name):
         '''
